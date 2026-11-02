@@ -1,0 +1,102 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// 说明：SQLite 不支持 Prisma enum，role / status / membershipLevel
+// 使用 String 存储，取值范围由 src/lib/constants.ts 约束。
+model User {
+  id              String     @id @default(cuid())
+  email           String     @unique
+  name            String
+  passwordHash    String
+  role            String     @default("USER") // USER | ADMIN
+  membershipLevel String     @default("XINYUE_0") // XINYUE_0 | XINYUE_1 | XINYUE_2 | XINYUE_3
+  totalSpent      Int        @default(0) // 累计实付，单位：分
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  cartItems       CartItem[]
+  orders          Order[]
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  slug        String    @unique
+  description String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String
+  price       Int // 单位：分
+  imageUrl    String
+  stock       Int         @default(0)
+  isActive    Boolean     @default(true)
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  cartItems   CartItem[]
+  orderItems  OrderItem[]
+
+  @@index([categoryId])
+  @@index([isActive])
+}
+
+model CartItem {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  quantity  Int      @default(1)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+}
+
+model Order {
+  id             String      @id @default(cuid())
+  orderNo        String      @unique
+  userId         String
+  user           User        @relation(fields: [userId], references: [id])
+  status         String      @default("PENDING") // PENDING | PAID | SHIPPED | COMPLETED | CANCELLED
+  originalAmount Int // 折前总额，单位：分
+  discountBps    Int         @default(10000) // 支付比例万分比，10000 = 原价
+  totalAmount    Int // 实付，单位：分
+  receiverName   String
+  receiverPhone  String
+  receiverAddr   String
+  paidAt         DateTime?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  items          OrderItem[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model OrderItem {
+  id           String   @id @default(cuid())
+  orderId      String
+  order        Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId    String?
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  productName  String // 下单时快照
+  productImage String // 下单时快照
+  price        Int // 下单时单价快照，单位：分
+  quantity     Int
+
+  @@index([orderId])
+}
